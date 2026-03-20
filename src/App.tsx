@@ -17,6 +17,8 @@ import {
   Maximize,
   Layers,
   ShieldCheck,
+  Scissors,
+  Minimize2,
   Phone,
   Mail,
   MessageCircle,
@@ -59,6 +61,9 @@ interface ParcelData {
   height: number; // cm
   volume?: number; // m3
   declaredValue?: number; // USD
+  isFabric?: boolean;
+  isPressed?: boolean;
+  isInsured?: boolean;
 }
 
 // --- Constants ---
@@ -138,7 +143,10 @@ export default function App() {
     width: 0,
     height: 0,
     volume: 0,
-    declaredValue: 0
+    declaredValue: 0,
+    isFabric: false,
+    isPressed: false,
+    isInsured: true
   });
 
   // Nova Poshta State
@@ -211,11 +219,13 @@ export default function App() {
       shippingCost = rate * chargeableValue;
     }
 
-    const insurance = (parcel.declaredValue || 0) * 0.02;
+    const insurance = (parcel.isInsured && parcel.declaredValue) ? Math.max(1, parcel.declaredValue * 0.02) : 0;
+    const fabricSurcharge = parcel.isFabric ? parcel.weight * 0.2 : 0;
+    const pressingCost = parcel.isPressed ? 5 : 0;
     const localDelivery = (selectedTariff.localDeliveryPrice || 0) * parcel.weight;
-    const total = shippingCost + insurance + localDelivery;
+    const total = shippingCost + insurance + localDelivery + fabricSurcharge + pressingCost;
 
-    return { shippingCost, insurance, localDelivery, total, rate, unit, chargeableValue };
+    return { shippingCost, insurance, localDelivery, fabricSurcharge, pressingCost, total, rate, unit, chargeableValue };
   }, [parcel, selectedTariff, density, volumeM3]);
 
   // --- Nova Poshta Calculations ---
@@ -470,6 +480,59 @@ export default function App() {
                       <div className="absolute right-6 top-1/2 -translate-y-1/2 text-[#e31e24] font-black">USD</div>
                     </div>
                   </div>
+
+                  <div className="space-y-4 sm:col-span-2 pt-6 border-t border-gray-50">
+                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                      Додаткові параметри
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <button 
+                        onClick={() => setParcel(p => ({ ...p, isInsured: !p.isInsured }))}
+                        className={cn(
+                          "flex items-center justify-between p-5 rounded-xl border-2 transition-all group",
+                          parcel.isInsured ? "border-[#003d2b] bg-[#003d2b]/5" : "border-gray-100 hover:border-gray-200"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <ShieldCheck className={cn("w-5 h-5 transition-colors", parcel.isInsured ? "text-[#e31e24]" : "text-gray-400 group-hover:text-[#e31e24]")} />
+                          <span className={cn("text-[11px] font-black uppercase tracking-widest", parcel.isInsured ? "text-[#003d2b]" : "text-gray-400")}>Страхування (2%)</span>
+                        </div>
+                        <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all", parcel.isInsured ? "border-[#003d2b] bg-[#003d2b]" : "border-gray-200")}>
+                          {parcel.isInsured && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                        </div>
+                      </button>
+                      <button 
+                        onClick={() => setParcel(p => ({ ...p, isFabric: !p.isFabric }))}
+                        className={cn(
+                          "flex items-center justify-between p-5 rounded-xl border-2 transition-all group",
+                          parcel.isFabric ? "border-[#003d2b] bg-[#003d2b]/5" : "border-gray-100 hover:border-gray-200"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Scissors className={cn("w-5 h-5 transition-colors", parcel.isFabric ? "text-[#e31e24]" : "text-gray-400 group-hover:text-[#e31e24]")} />
+                          <span className={cn("text-[11px] font-black uppercase tracking-widest", parcel.isFabric ? "text-[#003d2b]" : "text-gray-400")}>Тканина (+0.2$/кг)</span>
+                        </div>
+                        <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all", parcel.isFabric ? "border-[#003d2b] bg-[#003d2b]" : "border-gray-200")}>
+                          {parcel.isFabric && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                        </div>
+                      </button>
+                      <button 
+                        onClick={() => setParcel(p => ({ ...p, isPressed: !p.isPressed }))}
+                        className={cn(
+                          "flex items-center justify-between p-5 rounded-xl border-2 transition-all group",
+                          parcel.isPressed ? "border-[#003d2b] bg-[#003d2b]/5" : "border-gray-100 hover:border-gray-200"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Minimize2 className={cn("w-5 h-5 transition-colors", parcel.isPressed ? "text-[#e31e24]" : "text-gray-400 group-hover:text-[#e31e24]")} />
+                          <span className={cn("text-[11px] font-black uppercase tracking-widest", parcel.isPressed ? "text-[#003d2b]" : "text-gray-400")}>Пресування (+$5)</span>
+                        </div>
+                        <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all", parcel.isPressed ? "border-[#003d2b] bg-[#003d2b]" : "border-gray-200")}>
+                          {parcel.isPressed && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                        </div>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </section>
 
@@ -711,6 +774,12 @@ export default function App() {
                         <span className="text-gray-400 text-[11px] font-black uppercase tracking-widest group-hover:text-[#003d2b] transition-colors">Страхування</span>
                         <span className="font-black text-2xl text-[#003d2b]">${internationalDetails.insurance.toFixed(2)}</span>
                       </div>
+                      {(parcel.isFabric || parcel.isPressed) && (
+                        <div className="flex justify-between items-center group">
+                          <span className="text-gray-400 text-[11px] font-black uppercase tracking-widest group-hover:text-[#003d2b] transition-colors">Дод. послуги</span>
+                          <span className="font-black text-2xl text-[#003d2b]">${(internationalDetails.fabricSurcharge + internationalDetails.pressingCost).toFixed(2)}</span>
+                        </div>
+                      )}
                     </>
                   )}
                   {activeTab === 'novaposhta' && (
