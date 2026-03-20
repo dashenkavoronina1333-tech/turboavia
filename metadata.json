@@ -1,0 +1,5 @@
+{
+  "name": "China Shipping Calculator",
+  "description": "Calculate shipping costs from China based on weight, dimensions, and current tariffs. Supports AI-powered tariff extraction from screenshots.",
+  "requestFramePermissions": []
+}
