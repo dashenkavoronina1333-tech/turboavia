@@ -64,6 +64,7 @@ interface ParcelData {
   isFabric?: boolean;
   isPressed?: boolean;
   isInsured?: boolean;
+  density?: number; // kg/m3
 }
 
 // --- Constants ---
@@ -133,6 +134,7 @@ interface MoneyTransferData {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<CalculatorType>('international');
+  const [inputMethod, setInputMethod] = useState<'dims' | 'density'>('dims');
   const [tariffs] = useState<Tariff[]>(DEFAULT_TARIFFS);
   const [selectedTariffId, setSelectedTariffId] = useState<string>(DEFAULT_TARIFFS[0].id);
   
@@ -181,9 +183,15 @@ export default function App() {
   }, [parcel.volume, parcel.length, parcel.width, parcel.height]);
 
   const density = useMemo(() => {
+    if (inputMethod === 'density') return parcel.density || 0;
     if (volumeM3 === 0) return 0;
     return parcel.weight / volumeM3;
-  }, [parcel.weight, volumeM3]);
+  }, [parcel.weight, volumeM3, parcel.density, inputMethod]);
+
+  const finalVolumeM3 = useMemo(() => {
+    if (inputMethod === 'density' && density > 0) return parcel.weight / density;
+    return volumeM3;
+  }, [inputMethod, density, parcel.weight, volumeM3]);
 
   // Auto-update volume field when dimensions change
   React.useEffect(() => {
@@ -208,11 +216,13 @@ export default function App() {
       if (tier) {
         rate = tier.price;
         unit = tier.unit;
-        chargeableValue = tier.unit === 'kg' ? parcel.weight : volumeM3;
+        chargeableValue = tier.unit === 'kg' ? parcel.weight : finalVolumeM3;
         shippingCost = rate * chargeableValue;
       }
     } else if (selectedTariff.pricePerKg && selectedTariff.volumetricFactor) {
-      const volumetricWeight = (parcel.length * parcel.width * parcel.height) / selectedTariff.volumetricFactor;
+      const volumetricWeight = inputMethod === 'dims' 
+        ? (parcel.length * parcel.width * parcel.height) / selectedTariff.volumetricFactor
+        : 0;
       chargeableValue = Math.max(parcel.weight, volumetricWeight);
       rate = selectedTariff.pricePerKg;
       unit = 'kg';
@@ -226,7 +236,7 @@ export default function App() {
     const total = shippingCost + insurance + localDelivery + fabricSurcharge + pressingCost;
 
     return { shippingCost, insurance, localDelivery, fabricSurcharge, pressingCost, total, rate, unit, chargeableValue };
-  }, [parcel, selectedTariff, density, volumeM3]);
+  }, [parcel, selectedTariff, density, finalVolumeM3, inputMethod]);
 
   // --- Nova Poshta Calculations ---
   const npDetails = useMemo(() => {
@@ -380,13 +390,36 @@ export default function App() {
               <section className="bg-white rounded-2xl p-10 shadow-2xl border-b-8 border-[#e31e24] relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-gray-50 -mr-20 -mt-20 rounded-full" />
                 
-                <div className="flex items-center gap-4 mb-10 relative z-10">
-                  <div className="w-12 h-12 bg-[#003d2b] rounded-xl flex items-center justify-center text-white shadow-lg shadow-green-900/20">
-                    <Package className="w-7 h-7" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10 relative z-10">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-[#003d2b] rounded-xl flex items-center justify-center text-white shadow-lg shadow-green-900/20">
+                      <Package className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <h2 className="font-display font-black text-3xl uppercase tracking-tight text-[#003d2b]">Параметри вантажу</h2>
+                      <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Вкажіть дані вашої посилки</p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="font-display font-black text-3xl uppercase tracking-tight text-[#003d2b]">Параметри вантажу</h2>
-                    <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Вкажіть дані вашої посилки</p>
+
+                  <div className="flex bg-gray-100 p-1 rounded-xl self-start sm:self-center">
+                    <button 
+                      onClick={() => setInputMethod('dims')}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                        inputMethod === 'dims' ? "bg-[#003d2b] text-white shadow-md" : "text-gray-400 hover:text-gray-600"
+                      )}
+                    >
+                      Розміри
+                    </button>
+                    <button 
+                      onClick={() => setInputMethod('density')}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                        inputMethod === 'density' ? "bg-[#003d2b] text-white shadow-md" : "text-gray-400 hover:text-gray-600"
+                      )}
+                    >
+                      Щільність
+                    </button>
                   </div>
                 </div>
                 
@@ -407,63 +440,83 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-[#e31e24]" /> Об'єм вантажу (м³)
-                    </label>
-                    <div className="relative">
-                      <input 
-                        type="number" 
-                        value={parcel.volume || ''} 
-                        onChange={(e) => setParcel(p => ({ ...p, volume: parseFloat(e.target.value) || 0 }))}
-                        placeholder="0.000"
-                        step="0.001"
-                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-6 py-5 focus:border-[#003d2b] focus:bg-white outline-none font-black text-2xl transition-all placeholder:text-gray-200"
-                      />
-                      <div className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300 font-black">M³</div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-4 sm:col-span-2">
-                    <div className="flex justify-between items-center">
+                  {inputMethod === 'dims' ? (
+                    <div className="space-y-4">
                       <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                        <Maximize className="w-4 h-4 text-[#e31e24]" /> Габарити (см)
+                        <Layers className="w-4 h-4 text-[#e31e24]" /> Об'єм вантажу (м³)
                       </label>
-                      <span className="text-[10px] text-gray-300 font-black uppercase tracking-widest">Об'єм розраховується автоматично</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-6">
                       <div className="relative">
                         <input 
                           type="number" 
-                          value={parcel.length || ''} 
-                          onChange={(e) => setParcel(p => ({ ...p, length: parseFloat(e.target.value) || 0 }))}
-                          placeholder="Д"
-                          className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-5 focus:border-[#003d2b] focus:bg-white outline-none text-center font-black text-xl placeholder:text-gray-200"
+                          value={parcel.volume || ''} 
+                          onChange={(e) => setParcel(p => ({ ...p, volume: parseFloat(e.target.value) || 0 }))}
+                          placeholder="0.000"
+                          step="0.001"
+                          className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-6 py-5 focus:border-[#003d2b] focus:bg-white outline-none font-black text-2xl transition-all placeholder:text-gray-200"
                         />
-                        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[8px] text-gray-300 font-black uppercase">Довжина</span>
-                      </div>
-                      <div className="relative">
-                        <input 
-                          type="number" 
-                          value={parcel.width || ''} 
-                          onChange={(e) => setParcel(p => ({ ...p, width: parseFloat(e.target.value) || 0 }))}
-                          placeholder="Ш"
-                          className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-5 focus:border-[#003d2b] focus:bg-white outline-none text-center font-black text-xl placeholder:text-gray-200"
-                        />
-                        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[8px] text-gray-300 font-black uppercase">Ширина</span>
-                      </div>
-                      <div className="relative">
-                        <input 
-                          type="number" 
-                          value={parcel.height || ''} 
-                          onChange={(e) => setParcel(p => ({ ...p, height: parseFloat(e.target.value) || 0 }))}
-                          placeholder="В"
-                          className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-5 focus:border-[#003d2b] focus:bg-white outline-none text-center font-black text-xl placeholder:text-gray-200"
-                        />
-                        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[8px] text-gray-300 font-black uppercase">Висота</span>
+                        <div className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300 font-black">M³</div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Maximize className="w-4 h-4 text-[#e31e24]" /> Щільність (кг/м³)
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          value={parcel.density || ''} 
+                          onChange={(e) => setParcel(p => ({ ...p, density: parseFloat(e.target.value) || 0 }))}
+                          placeholder="0"
+                          className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-6 py-5 focus:border-[#003d2b] focus:bg-white outline-none font-black text-2xl transition-all placeholder:text-gray-200"
+                        />
+                        <div className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-300 font-black">KG/M³</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {inputMethod === 'dims' && (
+                    <div className="space-y-4 sm:col-span-2">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                          <Maximize className="w-4 h-4 text-[#e31e24]" /> Габарити (см)
+                        </label>
+                        <span className="text-[10px] text-gray-300 font-black uppercase tracking-widest">Об'єм розраховується автоматично</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-6">
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            value={parcel.length || ''} 
+                            onChange={(e) => setParcel(p => ({ ...p, length: parseFloat(e.target.value) || 0 }))}
+                            placeholder="Д"
+                            className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-5 focus:border-[#003d2b] focus:bg-white outline-none text-center font-black text-xl placeholder:text-gray-200"
+                          />
+                          <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[8px] text-gray-300 font-black uppercase">Довжина</span>
+                        </div>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            value={parcel.width || ''} 
+                            onChange={(e) => setParcel(p => ({ ...p, width: parseFloat(e.target.value) || 0 }))}
+                            placeholder="Ш"
+                            className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-5 focus:border-[#003d2b] focus:bg-white outline-none text-center font-black text-xl placeholder:text-gray-200"
+                          />
+                          <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[8px] text-gray-300 font-black uppercase">Ширина</span>
+                        </div>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            value={parcel.height || ''} 
+                            onChange={(e) => setParcel(p => ({ ...p, height: parseFloat(e.target.value) || 0 }))}
+                            placeholder="В"
+                            className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-5 focus:border-[#003d2b] focus:bg-white outline-none text-center font-black text-xl placeholder:text-gray-200"
+                          />
+                          <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[8px] text-gray-300 font-black uppercase">Висота</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-4 sm:col-span-2 pt-4">
                     <label className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -836,7 +889,7 @@ export default function App() {
                       </div>
                       <div className="text-right">
                         <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">Об'єм</p>
-                        <p className="text-2xl font-black text-[#e31e24] mt-1">{volumeM3.toFixed(3)} <span className="text-xs text-gray-400 font-bold">м³</span></p>
+                        <p className="text-2xl font-black text-[#e31e24] mt-1">{finalVolumeM3.toFixed(3)} <span className="text-xs text-gray-400 font-bold">м³</span></p>
                       </div>
                     </div>
                   </>
